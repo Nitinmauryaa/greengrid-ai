@@ -2,6 +2,8 @@ export type Role = 'owner' | 'admin' | 'resident';
 
 export type RiskLevel = 'NORMAL' | 'HIGH' | 'CRITICAL';
 
+export type AlertSeverity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+
 export interface User {
   id: string;
   name: string;
@@ -11,6 +13,19 @@ export interface User {
   flatNumber?: string;
 }
 
+export interface City {
+  id: string;
+  name: string;
+  zones: Zone[];
+}
+
+export interface Zone {
+  id: string;
+  name: string;
+  cityId: string;
+  societyIds: string[];
+}
+
 export interface Society {
   id: string;
   name: string;
@@ -18,6 +33,7 @@ export interface Society {
   transformerCapacity: number;
   householdCount: number;
   transformerCount: number;
+  zoneId?: string;
 }
 
 export interface EnergyReading {
@@ -30,6 +46,15 @@ export interface EnergyReading {
   transformerId: string;
 }
 
+export interface HybridRiskResult {
+  anomalyScore: number;
+  forecastRisk: number;
+  blackoutProbability: number;
+  totalRiskScore: number;
+  riskLevel: RiskLevel;
+  riskReason: string;
+}
+
 export interface AnomalyResult {
   timestamp: number;
   anomalyScore: number;
@@ -38,6 +63,9 @@ export interface AnomalyResult {
   overloadProbability: number;
   societyId: string;
   transformerId: string;
+  forecastRisk?: number;
+  blackoutProbability?: number;
+  totalRiskScore?: number;
 }
 
 export interface TransformerStatus {
@@ -49,4 +77,45 @@ export interface TransformerStatus {
   utilizationPercent: number;
   riskLevel: RiskLevel;
   temperature: number;
+}
+
+export interface DemandResponseScenario {
+  participationPercent: number;
+  shiftKwh: number;
+  stressReductionPercent: number;
+  costSavingPercent: number;
+  co2ReductionKg: number;
+}
+
+export interface DigitalTwinScenario {
+  evAdoptionIncrease: number;
+  temperatureRise: number;
+  solarPenetration: number;
+  overloadProbability: number;
+  lifeReductionYears: number;
+  investmentNeeded: number;
+}
+
+export interface CarbonMetrics {
+  monthlySavedKg: number;
+  annualProjectionKg: number;
+  equivalentTrees: number;
+  peakEmissionFactor: number;
+  offPeakEmissionFactor: number;
+}
+
+export interface GridStabilityIndex {
+  gsi: number;
+  status: 'Stable' | 'Moderate' | 'Critical';
+  trend: number[];
+}
+
+export interface Incident {
+  id: string;
+  timestamp: number;
+  severity: AlertSeverity;
+  title: string;
+  description: string;
+  societyId: string;
+  resolved: boolean;
 }

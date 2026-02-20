@@ -1,10 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { get24HourData } from '@/lib/mock-data';
+import { get24HourData, getCarbonMetrics } from '@/lib/mock-data';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { LoadHistoryChart } from '@/components/dashboard/LoadHistoryChart';
+import { CarbonIntelligence } from '@/components/dashboard/CarbonIntelligence';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { Zap, IndianRupee, Clock, Bell } from 'lucide-react';
+import { Zap, IndianRupee, Clock, Bell, Leaf } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 const ResidentDashboard = () => {
@@ -109,6 +110,8 @@ const ResidentDashboard = () => {
           ))}
         </div>
       </div>
+
+      <CarbonIntelligence societyId={societyId} />
     </div>
   );
 };

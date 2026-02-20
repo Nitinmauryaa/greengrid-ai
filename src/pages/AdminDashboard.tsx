@@ -1,12 +1,17 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { SOCIETIES, getTransformerStatuses, detectRisk, generateLiveReading } from '@/lib/mock-data';
+import { SOCIETIES, getTransformerStatuses, detectRisk, generateLiveReading, getGridStabilityIndex } from '@/lib/mock-data';
 import { TransformerGauge } from '@/components/dashboard/TransformerGauge';
 import { LiveChart } from '@/components/dashboard/LiveChart';
 import { AnomalyTable } from '@/components/dashboard/AnomalyTable';
 import { RiskCard } from '@/components/dashboard/RiskCard';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { LoadHistoryChart } from '@/components/dashboard/LoadHistoryChart';
+import { GridStabilityGauge } from '@/components/dashboard/GridStabilityGauge';
+import { DemandResponsePanel } from '@/components/dashboard/DemandResponsePanel';
+import { DigitalTwinPanel } from '@/components/dashboard/DigitalTwinPanel';
+import { CarbonIntelligence } from '@/components/dashboard/CarbonIntelligence';
+import { IncidentLog } from '@/components/dashboard/IncidentLog';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { AnomalyResult, TransformerStatus } from '@/lib/types';
@@ -25,8 +30,6 @@ const AdminDashboard = () => {
     const update = () => {
       const statuses = getTransformerStatuses(societyId, society.transformerCapacity);
       setTransformers(statuses);
-      
-      // Generate anomaly if risk is non-normal
       statuses.forEach(t => {
         if (t.riskLevel !== 'NORMAL') {
           const reading = generateLiveReading(societyId, t.id);
@@ -46,10 +49,11 @@ const AdminDashboard = () => {
 
   const criticalCount = transformers.filter(t => t.riskLevel === 'CRITICAL').length;
   const avgUtil = transformers.length > 0 ? transformers.reduce((s, t) => s + t.utilizationPercent, 0) / transformers.length : 0;
+  const gsi = getGridStabilityIndex(transformers);
 
   const handleSimulateAnomaly = () => {
     const reading = generateLiveReading(societyId, `${societyId}-t1`);
-    reading.loadKw = society.transformerCapacity * (0.85 + Math.random() * 0.2); // Force high load
+    reading.loadKw = society.transformerCapacity * (0.85 + Math.random() * 0.2);
     const anomaly = detectRisk(reading, society.transformerCapacity);
     anomaly.riskLevel = 'CRITICAL';
     anomaly.riskReason = 'Manually triggered anomaly simulation';
@@ -82,24 +86,30 @@ const AdminDashboard = () => {
         <StatCard title="Anomalies" value={anomalies.length} icon={AlertTriangle} subtitle="detected" />
       </div>
 
+      {/* GSI + Risk */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <GridStabilityGauge data={gsi} />
+        <RiskCard title="Overload Risk" value={avgUtil > 80 ? 78.3 : 15.4} unit="%" riskLevel={avgUtil > 80 ? 'CRITICAL' : avgUtil > 60 ? 'HIGH' : 'NORMAL'} />
+        <RiskCard title="Hybrid Score" value={(anomalies[0]?.totalRiskScore ?? 0) * 100} unit="%" riskLevel={anomalies[0]?.riskLevel ?? 'NORMAL'} subtitle="AI consensus" />
+        <RiskCard title="Blackout Risk" value={criticalCount > 0 ? 34.2 : 2.1} unit="%" riskLevel={criticalCount > 0 ? 'CRITICAL' : 'NORMAL'} subtitle="Bayesian model" />
+      </div>
+
       {/* Transformer gauges */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {transformers.map(t => (
-          <TransformerGauge key={t.id} transformer={t} />
-        ))}
+        {transformers.map(t => <TransformerGauge key={t.id} transformer={t} />)}
       </div>
 
-      {/* Live chart */}
       <LiveChart societyId={societyId} capacity={society.transformerCapacity} isSimulating={isSimulating} />
 
-      {/* Risk + Anomalies */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <RiskCard title="Overload Risk" value={avgUtil > 80 ? 78.3 : 15.4} unit="%" riskLevel={avgUtil > 80 ? 'CRITICAL' : avgUtil > 60 ? 'HIGH' : 'NORMAL'} />
-        <RiskCard title="Anomaly Score" value={anomalies[0]?.anomalyScore ?? 0} unit="" riskLevel={anomalies[0]?.riskLevel ?? 'NORMAL'} />
-        <RiskCard title="Blackout Risk" value={criticalCount > 0 ? 34.2 : 2.1} unit="%" riskLevel={criticalCount > 0 ? 'CRITICAL' : 'NORMAL'} />
+      {/* Demand Response + Digital Twin */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <DemandResponsePanel societyId={societyId} />
+        <DigitalTwinPanel capacity={society.transformerCapacity} />
       </div>
 
+      <CarbonIntelligence societyId={societyId} />
       <AnomalyTable anomalies={anomalies} />
+      <IncidentLog societyId={societyId} />
       <LoadHistoryChart societyId={societyId} />
     </div>
   );

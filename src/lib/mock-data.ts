@@ -1,4 +1,4 @@
-import { Society, EnergyReading, AnomalyResult, TransformerStatus, RiskLevel } from './types';
+import { Society, EnergyReading, AnomalyResult, TransformerStatus, RiskLevel, HybridRiskResult, DemandResponseScenario, DigitalTwinScenario, CarbonMetrics, GridStabilityIndex, City, Zone, Incident, AlertSeverity } from './types';
 
 // Raw CSV data embedded
 const RAW_DATA = [
@@ -12,12 +12,23 @@ const RAW_DATA = [
   {hour:21,load:193.08,temp:25.0,ev:0},{hour:22,load:64.87,temp:25.1,ev:0},{hour:23,load:134.09,temp:31.9,ev:1},
 ];
 
+export const CITIES: City[] = [
+  { id: 'c1', name: 'Delhi NCR Metro', zones: [
+    { id: 'z1', name: 'Gurugram Zone', cityId: 'c1', societyIds: ['s1', 's4'] },
+    { id: 'z2', name: 'Noida Zone', cityId: 'c1', societyIds: ['s5'] },
+  ]},
+  { id: 'c2', name: 'South India Grid', zones: [
+    { id: 'z3', name: 'Bangalore Zone', cityId: 'c2', societyIds: ['s2'] },
+    { id: 'z4', name: 'Mumbai Zone', cityId: 'c2', societyIds: ['s3'] },
+  ]},
+];
+
 export const SOCIETIES: Society[] = [
-  { id: 's1', name: 'Green Valley Estate', location: 'Sector 42, Gurugram', transformerCapacity: 300, householdCount: 100, transformerCount: 3 },
-  { id: 's2', name: 'Sunrise Towers', location: 'Whitefield, Bangalore', transformerCapacity: 280, householdCount: 85, transformerCount: 3 },
-  { id: 's3', name: 'Palm Heights', location: 'Powai, Mumbai', transformerCapacity: 320, householdCount: 120, transformerCount: 3 },
-  { id: 's4', name: 'Maple Gardens', location: 'Hinjewadi, Pune', transformerCapacity: 260, householdCount: 90, transformerCount: 3 },
-  { id: 's5', name: 'Cedar Residency', location: 'Noida Sector 62', transformerCapacity: 290, householdCount: 95, transformerCount: 3 },
+  { id: 's1', name: 'Green Valley Estate', location: 'Sector 42, Gurugram', transformerCapacity: 300, householdCount: 100, transformerCount: 3, zoneId: 'z1' },
+  { id: 's2', name: 'Sunrise Towers', location: 'Whitefield, Bangalore', transformerCapacity: 280, householdCount: 85, transformerCount: 3, zoneId: 'z3' },
+  { id: 's3', name: 'Palm Heights', location: 'Powai, Mumbai', transformerCapacity: 320, householdCount: 120, transformerCount: 3, zoneId: 'z4' },
+  { id: 's4', name: 'Maple Gardens', location: 'Hinjewadi, Pune', transformerCapacity: 260, householdCount: 90, transformerCount: 3, zoneId: 'z1' },
+  { id: 's5', name: 'Cedar Residency', location: 'Noida Sector 62', transformerCapacity: 290, householdCount: 95, transformerCount: 3, zoneId: 'z2' },
 ];
 
 export const DEMO_USERS = [
@@ -44,41 +55,65 @@ export function generateLiveReading(societyId: string, transformerId: string, ho
   };
 }
 
-export function detectRisk(reading: EnergyReading, capacity: number): AnomalyResult {
+// ── Hybrid AI Risk Engine ──
+// Total_Risk = 0.4 × anomaly_prob + 0.4 × predicted_peak_prob + 0.2 × stress_ratio
+export function hybridRiskDetection(reading: EnergyReading, capacity: number): HybridRiskResult {
   const utilization = reading.loadKw / capacity;
-  const isAnomaly = Math.random() < 0.1; // 10% anomaly injection
+  const isAnomaly = Math.random() < 0.1;
+  
+  // Isolation Forest score (simulated)
+  const anomalyScore = isAnomaly ? 0.6 + Math.random() * 0.4 : Math.random() * 0.3;
+  
+  // LSTM forecast risk (simulated — looks at hour pattern)
+  const peakHours = [17, 18, 19, 20, 21];
+  const forecastRisk = peakHours.includes(reading.hour) ? 0.5 + Math.random() * 0.4 : Math.random() * 0.3;
+  
+  // Bayesian blackout probability
+  const blackoutProbability = Math.min(
+    (utilization > 0.85 ? 0.4 : 0.05) + (isAnomaly ? 0.2 : 0) + (forecastRisk * 0.3),
+    1.0
+  );
+  
+  // Hybrid formula
+  const totalRiskScore = 0.4 * anomalyScore + 0.4 * forecastRisk + 0.2 * utilization;
   
   let riskLevel: RiskLevel = 'NORMAL';
-  let riskReason = 'Load within normal parameters';
-  let anomalyScore = Math.random() * 0.3;
+  let riskReason = 'All systems nominal';
   
-  if (utilization > 0.9) {
+  if (totalRiskScore > 0.7 || utilization > 0.9) {
     riskLevel = 'CRITICAL';
-    riskReason = `Transformer at ${(utilization * 100).toFixed(0)}% capacity - immediate attention required`;
-    anomalyScore = 0.85 + Math.random() * 0.15;
-  } else if (isAnomaly || utilization > 0.75) {
+    riskReason = `Hybrid score ${(totalRiskScore * 100).toFixed(0)}% — multi-model consensus: immediate risk`;
+  } else if (totalRiskScore > 0.4 || isAnomaly) {
     riskLevel = 'HIGH';
-    riskReason = isAnomaly 
-      ? 'Anomalous load pattern detected by Isolation Forest' 
-      : `Load approaching threshold at ${(utilization * 100).toFixed(0)}%`;
-    anomalyScore = 0.5 + Math.random() * 0.35;
+    riskReason = isAnomaly
+      ? 'Isolation Forest anomaly detected; LSTM confirms elevated risk'
+      : `Forecast risk elevated at ${(forecastRisk * 100).toFixed(0)}%`;
   }
 
+  return { anomalyScore, forecastRisk, blackoutProbability, totalRiskScore, riskLevel, riskReason };
+}
+
+export function detectRisk(reading: EnergyReading, capacity: number): AnomalyResult {
+  const hybrid = hybridRiskDetection(reading, capacity);
+  const utilization = reading.loadKw / capacity;
   return {
     timestamp: reading.timestamp,
-    anomalyScore,
-    riskLevel,
-    riskReason,
-    overloadProbability: Math.min(utilization * 100 + (isAnomaly ? 15 : 0), 100),
+    anomalyScore: hybrid.anomalyScore,
+    riskLevel: hybrid.riskLevel,
+    riskReason: hybrid.riskReason,
+    overloadProbability: Math.min(utilization * 100 + (hybrid.anomalyScore > 0.5 ? 15 : 0), 100),
     societyId: reading.societyId,
     transformerId: reading.transformerId,
+    forecastRisk: hybrid.forecastRisk,
+    blackoutProbability: hybrid.blackoutProbability,
+    totalRiskScore: hybrid.totalRiskScore,
   };
 }
 
 export function getTransformerStatuses(societyId: string, capacity: number): TransformerStatus[] {
   return ['T1', 'T2', 'T3'].map((name, i) => {
     const reading = generateLiveReading(societyId, `${societyId}-t${i+1}`);
-    const risk = detectRisk(reading, capacity);
+    const risk = hybridRiskDetection(reading, capacity);
     const util = (reading.loadKw / capacity) * 100;
     return {
       id: `${societyId}-t${i+1}`,
@@ -102,5 +137,74 @@ export function get24HourData(societyId: string): EnergyReading[] {
     evCharging: d.ev === 1,
     societyId,
     transformerId: `${societyId}-t1`,
+  }));
+}
+
+// ── Demand Response Simulation ──
+export function simulateDemandResponse(participationPercent: number, societyId: string): DemandResponseScenario {
+  const society = SOCIETIES.find(s => s.id === societyId) || SOCIETIES[0];
+  const avgLoad = 150; // kW avg
+  const shiftKwh = (participationPercent / 100) * society.householdCount * 1.2;
+  const stressReductionPercent = participationPercent * 0.6;
+  const costSavingPercent = participationPercent * 0.35;
+  const co2ReductionKg = shiftKwh * 0.82; // kg CO2 per kWh shifted
+  return { participationPercent, shiftKwh, stressReductionPercent, costSavingPercent, co2ReductionKg };
+}
+
+// ── Digital Twin Simulation ──
+export function simulateDigitalTwin(evIncrease: number, tempRise: number, solarPercent: number, capacity: number): DigitalTwinScenario {
+  const baseLoad = 180;
+  const evLoad = baseLoad * (evIncrease / 100) * 0.3;
+  const tempLoad = tempRise * 5.2;
+  const solarOffset = capacity * (solarPercent / 100) * 0.25;
+  const projectedLoad = baseLoad + evLoad + tempLoad - solarOffset;
+  const overloadProbability = Math.min(Math.max((projectedLoad / capacity - 0.7) * 200, 0), 100);
+  const lifeReductionYears = Math.max((overloadProbability / 100) * 8, 0);
+  const investmentNeeded = overloadProbability > 50 ? Math.round(overloadProbability * 1.5) : 0; // lakhs
+  return { evAdoptionIncrease: evIncrease, temperatureRise: tempRise, solarPenetration: solarPercent, overloadProbability, lifeReductionYears, investmentNeeded };
+}
+
+// ── Carbon Intelligence ──
+export function getCarbonMetrics(societyId: string): CarbonMetrics {
+  const peakFactor = 0.92; // kg CO2/kWh during peak (coal)
+  const offPeakFactor = 0.45; // kg CO2/kWh off-peak
+  const shiftedKwh = 420 + Math.random() * 100;
+  const monthlySaved = shiftedKwh * (peakFactor - offPeakFactor);
+  return {
+    monthlySavedKg: monthlySaved,
+    annualProjectionKg: monthlySaved * 12,
+    equivalentTrees: Math.round((monthlySaved * 12) / 21),
+    peakEmissionFactor: peakFactor,
+    offPeakEmissionFactor: offPeakFactor,
+  };
+}
+
+// ── Grid Stability Index ──
+export function getGridStabilityIndex(statuses: TransformerStatus[]): GridStabilityIndex {
+  if (statuses.length === 0) return { gsi: 85, status: 'Stable', trend: [82, 85, 80, 88, 85] };
+  const avgUtil = statuses.reduce((s, t) => s + t.utilizationPercent, 0) / statuses.length;
+  const critCount = statuses.filter(t => t.riskLevel === 'CRITICAL').length;
+  const blackoutProb = (critCount / statuses.length) * 0.5 + (avgUtil / 100) * 0.5;
+  const gsi = Math.round((1 - blackoutProb) * 100);
+  const status = gsi >= 80 ? 'Stable' as const : gsi >= 50 ? 'Moderate' as const : 'Critical' as const;
+  const trend = Array.from({ length: 12 }, () => Math.max(30, Math.min(100, gsi + (Math.random() - 0.5) * 20)));
+  return { gsi, status, trend };
+}
+
+// ── Incidents ──
+export function generateIncidents(societyId: string): Incident[] {
+  const severities: AlertSeverity[] = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
+  const titles = [
+    'Transformer overload detected', 'Anomalous load pattern', 'EV surge spike',
+    'Temperature threshold exceeded', 'Grid frequency deviation', 'Voltage fluctuation alert'
+  ];
+  return Array.from({ length: 5 }, (_, i) => ({
+    id: `inc-${i}`,
+    timestamp: Date.now() - i * 3600000,
+    severity: severities[Math.floor(Math.random() * severities.length)],
+    title: titles[i % titles.length],
+    description: `Auto-detected by hybrid AI engine for ${societyId}`,
+    societyId,
+    resolved: Math.random() > 0.4,
   }));
 }
